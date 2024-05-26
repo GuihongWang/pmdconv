@@ -39,8 +39,8 @@ $path = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe
 $path = join-path $path 'MSBuild\Current\Bin\MSBuild.exe'
 
 #构建Lib
-&$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Debug;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.14393.0"
-&$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Release;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.14393.0"
+&$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Debug;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17763.0"
+&$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Release;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17763.0"
 
 #构建主程序
 &$path pmdconv.vcxproj "/p:Configuration=Release;Platform=Win32"
