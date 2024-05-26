@@ -6,16 +6,16 @@ function Unzip
 	[System.IO.Compression.ZipFile]::ExtractToDirectory($zipfile, $outpath)
 }
 
-#∏¸–¬midifileø‚µΩŒƒº˛º–÷–
+#Êõ¥Êñ∞midifileÂ∫ìÂà∞Êñá‰ª∂Â§π‰∏≠
 $webc = New-Object System.Net.WebClient
 if(!(Test-Path "$PSScriptRoot\midifile.zip"))
 {
-	echo "œ¬‘ÿ midifile..."
+	echo "‰∏ãËΩΩ midifile..."
 	$webc.DownloadFile("https://github.com/craigsapp/midifile/zipball/master","$PSScriptRoot\midifile.zip")
 }
 if(!(Test-Path "$PSScriptRoot\FMPMD_SDK*.zip"))
 {
-	echo "œ¬‘ÿ FMPMD_SDK..."
+	echo "‰∏ãËΩΩ FMPMD_SDK..."
 	$webc.DownloadFile("http://c60.la.coocan.jp/download/FMPMD_SDK004.zip","$PSScriptRoot\FMPMD_SDK004.zip")
 }
 
@@ -34,13 +34,13 @@ if(!(Test-Path "PMDWin"))
 	ren "PMDWin\PMDWinImort.h" "PMDWinImport.h"
 }
 
-#≤È’“MSBuild
+#Êü•ÊâæMSBuild
 $path = &"${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-$path = join-path $path 'MSBuild\15.0\Bin\MSBuild.exe'
+$path = join-path $path 'MSBuild\Current\Bin\MSBuild.exe'
 
-#ππΩ®Lib
+#ÊûÑÂª∫Lib
 &$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Debug;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.14393.0"
 &$path midifile\visual-studio\midifile.vcxproj "/p:Configuration=Release;Platform=Win32;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.14393.0"
 
-#ππΩ®÷˜≥Ã–Ú
+#ÊûÑÂª∫‰∏ªÁ®ãÂ∫è
 &$path pmdconv.vcxproj "/p:Configuration=Release;Platform=Win32"
