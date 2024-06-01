@@ -1,0 +1,1116 @@
+==============================================================================
+                     FMP for Windows 「WinFMP」 Ver.0.18
+                        Copyright & Programmed by C60
+                                 DLL 仕様書
+==============================================================================
+
+
+------------------------------------------------------------------------------
+▼はじめに
+    本仕様書は、WinFMP.dll から export されている関数一覧です。
+    WinFMP Ver0.10 以降で使用できます。
+    Ｃ言語で使う場合は FMPMD_SDK004.lzh に同梱されている WinFMPimport.h
+    WinFMP.lib を include して下さい(あるいは LoadLibrary 等で
+    動的に読み込んでください)
+    Delphi で用いる場合は、FMPMD_SDK004.lzh に同梱されている WinFMP.pas, 
+    PCMMusDriver.pas を組み込んでお使いください。
+    
+    
+------------------------------------------------------------------------------
+▼主な変更点
+    ・Ver0.18 より、PDZF/Z8X for Windows(TAN-Yさん作)に正式対応しました。
+      (ただし、DLL インターフェイスでの制御はサポートしていません。
+       COM風インターフェイスで制御してください)
+    ・Ver0.15 より、fmp_setfmcalc55k() 相当の処理を fmgen 側ではなく
+      WinFMP.dll 側で持つようにしました。
+    ・Ver0.15 より、getcomment(), getcomment2(), fgetcomment(), 
+      fgetcomment2() の戻り値を最大 1024 バイトで制限するようにしました。
+    ・Ver0.14 より、fmgen の仕様変更に伴い fmp_setfmcalc55k() を実行しても
+      効果がなくなりました。
+    ・Ver0.10 より、fmp_setadpcmppz8emulate() が追加されました。
+    ・Ver0.03 より、COM 風インターフェイス、fmp_CoCreateInstance が
+      実装されました。。WinFMP のインスタンスを複数取得して利用することが
+      できます。
+    ・Ver0.03 より、fmp_setppzrate(), fmp_setfmcalc55k(), fmp_getsyncscnt(),
+      fmp_getlastsyncexttime() が追加され、fmp_setpcmrate() で任意の正の値を
+      設定できるようになりました。
+    ・Ver0.02 より、fmp_setfmwait(), fmp_setssgwait(), fmp_setrhythmwait(),
+      fmp_setadpcmwait() が追加されました。
+    
+    
+------------------------------------------------------------------------------
+▼注意点
+    １）WinFMP.dll では音声の出力は行いません。
+    　　プレイヤ側で wave デバイスに PCM データの出力を行う必要があります。
+    ２）WinFMP.dll は一部を除きスレッドセーフではありません。
+    　　複数のスレッドから同時にアクセスする場合は、クリティカルセクション
+    　　等で保護してください。
+    　　fmp_getlength(), fmp_getlength2(), fmp_getcomment(),
+    　　fmp_getcomment2(), fmp_getcomment3(), fmp_fgetcomment(), 
+    　　fmp_fgetcomment2(), fmp_fgetcomment3(), fmp_getdefinedpcmfilename(), 
+    　　fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    　　fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    　　別のスレッドから同時に実行できます。
+    
+    
+------------------------------------------------------------------------------
+▼関数の使用手順(例：DLLインターフェイスを用いる場合)
+    fmp_getversion(), fmp_getinterfaceversion() でバージョンチェック
+    　↓
+    fmp_init() で初期化
+    　↓
+    fmp_setpcmdir(), fmp_setpcmrate() 等で動作環境の設定
+    　↓
+    fmp_load() あるいは fmp_load2() で曲データの読み込み
+    　↓
+    fmp_start() で演奏開始
+    　↓
+    fmp_getpcmdata() で PCM データの取得。プレイヤで wave デバイスに出力
+    　↓
+    fmp_stop() で演奏終了
+    　↓
+    現在の曲を再演奏するなら、fmp_start() から。
+    次の曲を演奏するなら、fmp_load() あるいは fmp_load2() から。
+    
+    
+------------------------------------------------------------------------------
+▼ファンクション一覧
+
+    上段はＣ言語、下段は Delphi での定義です。なお、Ｃ言語では
+        typedef unsigned char uchar;
+    Delphi では
+        type
+            PSmallInt = ^SmallInt;
+            TComment = Array[0..3-1] of PChar;
+    です。
+    
+    
+===============================================================================
+    int fmp_getversion(void);
+    function fmp_getversion : Integer;
+-------------------------------------------------------------------------------
+    input           無し
+    output          DLL のバージョン
+-------------------------------------------------------------------------------
+
+    WinFMP.dll のバージョンを取得します。
+    10進数で100の位がメジャーバージョン、下2桁がマイナーバージョンです。
+    現在の戻り値は018です。
+    
+    
+===============================================================================
+    int fmp_getinterfaceversion(void);
+    function fmp_getinterfaceversion : Integer;
+-------------------------------------------------------------------------------
+    input           無し
+    output          DLL インターフェイスのバージョン
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll のインターフェイスのバージョンを取得します。
+    10進数で100の位がメジャーバージョン、下2桁がマイナーバージョンです。
+    現在の戻り値は011です。
+    
+    下位バージョンから export されている関数の削減、仕様変更があった場合には
+    メジャーバージョンが上がります。
+    下位バージョンから export されている関数の追加のみの場合にはメジャーバー
+    ジョンは変わらず、マイナーバージョンのみが上がります。
+    下位バージョンから export されている関数が変わらないときにはバージョンは
+    変化しません。
+    
+    
+===============================================================================
+    HRESULT WINAPI fmp_CoCreateInstance(REFCLSID rclsid, LPUNKNOWN pUnkOuter,
+        DWORD dwClsContext, REFIID riid, LPVOID * ppv);
+    function fmp_CoCreateInstance(const clsid: TCLSID; unkOuter: IUnknown;
+        dwClsContext: Longint; const iid: TIID; var pv) : HResult; stdcall;
+-------------------------------------------------------------------------------
+
+    WinFMP の インスタンスを生成し、インターフェイスポインタを取得します。
+    詳細は、COMInfof.txt を参照してください。
+    
+    
+===============================================================================
+    bool fmp_init(char *path);
+    function fmp_init(path : PChar) : Boolean;
+-------------------------------------------------------------------------------
+    input
+        path        リズム音の wav が存在するディレクトリ
+    output          初期化に成功したら true, 成功しなかったら false
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll の初期化を行います。
+    以下のファンクションを使用する前に一度呼び出してください。
+    
+    path の最後の「\」は付けても付けなくても構いません。
+    path が NULL の場合は作業フォルダ(ショートカットで指定したフォルダ、
+    あるいはプレイヤがあるフォルダ)から読み込みます。
+    
+    
+===============================================================================
+    bool fmp_loadrhythmsample(char *path);
+    function fmp_loadrhythmsample(path : PChar) : Boolean;
+-------------------------------------------------------------------------------
+    input
+        path        リズム音の wav が存在するディレクトリ
+    output          読み込みに成功したら true, 成功しなかったら false
+-------------------------------------------------------------------------------
+    
+    リズム音の wave を再度読み込みます。
+    実行すると曲の演奏が止まります。
+    
+    path の最後の「\」は付けても付けなくても構いません。
+    path が NULL の場合は作業フォルダ(ショートカットで指定したフォルダ、
+    あるいはプレイヤがあるフォルダ)から読み込みます。
+    
+    
+===============================================================================
+    bool fmp_setpcmdir(char **path);
+    function fmp_setpcmdir(pcmdir : Array of PChar) : Boolean;
+-------------------------------------------------------------------------------
+    input
+        path        PCM の検索パスのポインタ配列
+    output          path が64個を超えたら false
+-------------------------------------------------------------------------------
+    
+    PVI の検索パスを指定します。
+    path はPVI の検索パスのポインタ配列です。
+    fmp_load() で読み込まれる曲データと同じディレクトリは最初に必ず
+    検索されるので、ここで指定する必要はありません。
+    
+    path の最後の「\」は付けても付けなくても構いません。
+    FMP_MAX_PCMDIR(現在64)ディレクトリまで指定できます。
+    最後には NULL か "" を指定してください。
+    
+    ex) c:\fmp\pvi, c:\fmp\pvi2 を指定するとき
+        
+        char *path[MAX_PCMDIR+1];
+        path[0] = "c:\fmp\pvi";
+        path[1] = "c:\fmp\pvi2";
+        path[2] = NULL; または path[2] = "";
+    
+    
+===============================================================================
+    void fmp_setpcmrate(int rate);
+    procedure fmp_setpcmrate(rate : Integer);
+-------------------------------------------------------------------------------
+    input
+        rate        再生周波数
+    output          なし
+-------------------------------------------------------------------------------
+    
+    fmp_getpcmdata() で取得する PCM の周波数を指定します。
+    rate は任意の正の値を指定できますが、下位互換性確保のため、API 内部で
+    fmp_setppzrate(), fmp_setfmcalc55k() も自動的に実行されます。
+    
+    ・rate = SOUND_55K の場合
+        出力する PCM の周波数、PPZ 駆動周波数は 44kHz
+        fmp_fmcalk55k(true);
+        
+    ・rate != SOUND_55K の場合
+        出力する PCM の周波数、PPZ 駆動周波数は rate で指定された値。
+        fmp_fmcalk55k(false);
+    
+    
+    fmp_setppzrate(), fmp_setfmcalc55k() は、本 API の後に実行してください。
+    
+    
+===============================================================================
+    void fmp_setppzrate(int rate);
+    procedure fmp_setppzrate(rate : Integer);
+-------------------------------------------------------------------------------
+    input
+        rate        PPZ8 駆動周波数(Hz)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    PPZ8 の駆動周波数を指定します。rate は任意の値（1以上)を指定できます。
+    
+    fmp_setpcmrate() を実行すると、本 API で指定された値が上書きされるので、
+    fmp_setpcmrate() の後に実行するようにして下さい。
+    
+    
+===============================================================================
+    void fmp_setfmcalc55k(bool flag);
+    procedure fmp_setfmcalc55k(flag : Boolean);
+-------------------------------------------------------------------------------
+    input
+        flag        // FM 音源の合成処理を 55kHz で行うなら true
+                    // fmp_setpcmrate() で指定した値で行うなら false
+    output          なし
+-------------------------------------------------------------------------------
+    FM 音源の合成処理を 55kHz で行うかどうかを指定します。
+    55kHz で合成を行うと音質は向上しますが、若干処理が重くなります。
+    本 API の指定は、fmp_getpcmdata() で取得される PCM データの周波数とは
+    無関係です。
+    
+    fmp_setpcmrate() を実行すると、本 API で指定された値が上書きされる
+    ので、fmp_setpcmrate() の後に実行するようにして下さい。
+    
+    
+===============================================================================
+    int fmp_load(char *filename);
+    function fmp_load(filename : PChar) : Integer;
+-------------------------------------------------------------------------------
+    input
+        filename    曲データのファイル名(フルパス)
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+    
+    ファイル名で示される曲データを WinFMP.dll に読み込みます。
+    曲データで PCM ファイルが指定されている場合は、最初に曲データの
+    存在するディレクトリ、見つからなかったら fmp_setpcmdir() で指定された
+    ディレクトリより PCM の読み込みが行われます。
+    実際に演奏させるためには、fmp_start() を呼び出す必要があります。
+    
+    戻り値：
+        WINFMP_OK                       正常終了
+        FMP_ERR_OPEN_MUSIC_FILE         曲 データを開けなかった
+        FMP_ERR_WRONG_MUSIC_FILE        FMP の曲データではなかった
+        FMP_ERR_OPEN_PVI_FILE           PVI を開けなかった
+        FMP_ERR_WRONG_PVI_FILE          PVI が異常
+        FMP_WARNING_PVI_ALREADY_LOAD    PVI は既に読み込まれていた
+        FMP_ERR_OPEN_PPZ1_FILE          PPZ を開けなかった
+        FMP_ERR_WRONG_PPZ1_FILE         PPZ が異常
+        FMP_WARNING_PPZ1_ALREADY_LOAD   PPZ は既に読み込まれていた
+        FMP_ERR_OUT_OF_MEMORY           メモリ不足
+    
+    
+===============================================================================
+    int fmp_load2(uchar *musdata, int size);
+    function fmp_load2(musdata : Pointer; size : Integer) : Integer;
+-------------------------------------------------------------------------------
+    input
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+    
+    musdata と size で指定されるメモリ上の曲データを WinFMP.dll に
+    読み込みます。
+    PCM は setpcmdir() で指定されたディレクトリより読み込まれます。
+    実際に演奏させるためには、fmp_start() を呼び出す必要があります。
+    
+    戻り値：
+        WINFMP_OK                       正常終了
+        FMP_ERR_WRONG_MUSIC_FILE        FMP の曲データではなかった
+        FMP_ERR_OPEN_PVI_FILE           PVI を開けなかった
+        FMP_ERR_WRONG_PVI_FILE          PVI が異常
+        FMP_WARNING_PVI_ALREADY_LOAD    PVI は既に読み込まれていた
+        FMP_ERR_OPEN_PPZ1_FILE          PPZ を開けなかった
+        FMP_ERR_WRONG_PPZ1_FILE         PPZ が異常
+        FMP_WARNING_PPZ1_ALREADY_LOAD   PPZ は既に読み込まれていた
+        FMP_ERR_OUT_OF_MEMORY           メモリ不足
+    
+    
+===============================================================================
+    void fmp_start(void);
+    procedure fmp_start;
+-------------------------------------------------------------------------------
+    input           なし
+    output          なし
+-------------------------------------------------------------------------------
+    
+    fmp_load() あるいは fmp_load2() で読み込まれた曲の合成開始を
+    指示します。
+    実際の PCM データの取得には、fmp_getpcmdata() を使用してください。
+    
+    
+===============================================================================
+    void fmp_stop(void);
+    procedure fmp_stop;
+-------------------------------------------------------------------------------
+    input           なし
+    output          なし
+-------------------------------------------------------------------------------
+    
+    曲の合成を終了します。
+    実行後に fmp_getpcmdata() を呼び出しても無音データしか取得できません。
+    
+    
+===============================================================================
+    void fmp_fadeout(int speed);
+    procedure fmp_fadeout(speed : Integer);
+-------------------------------------------------------------------------------
+    input
+        speed       フェードアウトの速度(０～１２７)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    曲のフェードアウトを行います(FMP 互換)
+    speed は１～１２７で、大きいほど速くなります。
+    ０ならデフォルト値（３）です。
+    
+    
+===============================================================================
+    void fmp_fadeout2(int speed);
+    procedure fmp_fadeout2(speed : Integer);
+-------------------------------------------------------------------------------
+    input
+        speed       フェードアウトするまでの時間(ms 単位、1～2147483647)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    曲のフェードアウトを行います(高音質)
+    speed はフェードアウトするまでの時間(ms 単位)を指定します。
+    
+    
+===============================================================================
+    void fmp_getpcmdata(short *buf, int nsamples);
+    procedure fmp_getpcmdata(buf : PSmallInt; nsamples : Integer);
+-------------------------------------------------------------------------------
+    input
+        buf         PCM データを格納するバッファのポインタ
+        nsamples    取得するサンプル数
+    output          なし
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll で合成された PCM データを取得します。
+    fmp_start() で曲の演奏を開始していない時には無音データが取得されます。
+    得られる PCM データは 16bit, stereo, setpcmrate() で指定した周波数です。
+    バッファサイズは、nsamples * 4(bytes)必要です。
+    この関数で取得した PCM データをプレイヤ側で再生させてください。
+    
+    ex) fmp_setpcmrate(SOUND_44K);      // 44.1kHz を指定
+        fmp_getpcmdata(buf, 44100);     // 1秒分のデータを buf に取得
+                                        // (ワークの内容も１秒分進みます)
+    
+    ※この関数を呼び出したときにワークの変更が行われます。
+    　ビューアー等でワークのデータを表示させる場合は、少しづつ読み出さないと
+    　表示がぎこちなくなってしまいます。
+
+
+===============================================================================
+    void fmp_setppzinterpolation(bool ip);
+    procedure fmp_setppzinterpolation(ip : Boolean);
+-------------------------------------------------------------------------------
+    input
+        ip          一次補間を行うなら true
+    output          なし
+-------------------------------------------------------------------------------
+    
+    PPZ8 パートで一次補間を行うかどうかを指定します。
+    一次補間を行うと音質は上がりますが、処理が重くなります。
+    
+    
+===============================================================================
+    void fmp_setadpcmppz8emulate(bool flag);
+    procedure fmp_setadpcmppz8emulate(flag : Boolean);
+-------------------------------------------------------------------------------
+    input
+        flag        ADPCM パートを PPZ8 で再生するなら true
+    output          なし
+-------------------------------------------------------------------------------
+    
+    ADPCM パートを PPZ8 で再生するかどうかを指定します。
+    デフォルトは false(ADPCM パートは OPNA で再生)です。
+    
+    
+===============================================================================
+    char *fmp_getcomment(char *dest, uchar *musdata, int size);
+    function fmp_getcomment(dest : PChar; musdata : Pointer; size : Integer)
+        : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+
+    ３行コメント文字列を取得します。
+    musdata = NULL または size = 0 の場合は WinFMP.dll に読み込まれて
+    いる曲データの３行コメントを取得し、その他の場合は musdata と size で
+    指定されるメモリ上の曲データの３行コメントを取得します。
+    dest で指定される文字列格納用のバッファは 8192 バイト以上確保して下さい。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+    
+    
+===============================================================================
+    char *fmp_getcomment2(char *dest, uchar *musdata, int size);
+    function fmp_getcomment2(dest : PChar; musdata : Pointer; size : Integer)
+        : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+    
+    fmp_getcomment() とほぼ同様ですが、２バイト半角文字を通常の半角文字に
+    変換して取得します。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+    
+    
+===============================================================================
+    char **fmp_getcomment3(char *dest[], uchar *musdata, int size);
+    function fmp_getcomment3(dest : TComment; musdata : Pointer;
+        size : Integer) : PComment;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタの配列
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+    
+    fmp_getcomment2() に加えてさらにエスケープシーケンスを除去し、TAB を
+    スペースに変換し、３行に分割します。
+    
+    dest は、３行コメントを取得するバッファへのポインタ配列です。
+    各バッファは、80+2 バイト以上確保してください。
+    
+    ex)
+        char    line1[80+2];        // １行目
+        char    line2[80+2];        // ２行目
+        char    line3[80+2];        // ３行目
+        char    *dest[3];
+        
+        dest[0] = line1;
+        dest[1] = line2;
+        dest[2] = line3;
+        
+        fmp_getcomment3(dest, musdata, size);
+    
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_fgetcomment(char *dest, char *filename)
+    function fmp_fgetcomment(dest : PChar; filename : PChar) : Integer;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        filename    曲データのファイル名（フルパス）
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+
+    メモ文字列を取得します。
+    ファイル名で指定する以外は fmp_getcomment() と同じです。
+    filename = NULL の場合は WinFMP.dll に読み込まれている曲データの
+    ３行コメントを取得し、その他の場合は filename で指定される曲データの
+    ３行コメントを取得します。
+
+    戻り値：
+        WINFMP_OK                   正常終了
+        FMP_ERR_OPEN_MUSIC_FILE     曲 データを開けなかった
+        FMP_ERR_OUT_OF_MEMORY       メモリ不足
+
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_fgetcomment2(char *dest, char *filename)
+    function fmp_fgetcomment2(dest : PChar; filename : PChar) : Integer;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        filename    曲データのファイル名（フルパス）
+    output          fmp_fgetcomment() と同じ
+-------------------------------------------------------------------------------
+
+    fmp_fgetcomment() とほぼ同様ですが、２バイト半角文字を通常の半角文字に
+    変換して取得します。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_fgetcomment3(char *dest[], char *filename)
+    function fmp_fgetcomment3(dest : TComment; filename : PChar)
+        : Integer;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタの配列
+        filename    曲データのファイル名（フルパス）
+    output          fmp_fgetcomment() と同じ
+-------------------------------------------------------------------------------
+
+    fmp_fgetcomment2() に加えてさらにエスケープシーケンスを除去し、３行に
+    分割します。
+    
+    dest は、３行コメントを取得するバッファへのポインタ配列です。
+    各バッファは、80+2 バイト以上確保してください。
+    
+    ex)
+        char    line1[80+2];        // １行目
+        char    line2[80+2];        // ２行目
+        char    line3[80+2];        // ３行目
+        char    *dest[3];
+        
+        dest[0] = line1;
+        dest[1] = line2;
+        dest[2] = line3;
+        
+        fmp_fgetcomment3(dest, filename);
+    
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    char *fmp_getdefinedpcmfilename(char *dest, uchar *musdata, int size)
+    function fmp_getdefinedpcmfilename(dest : PChar; musdata : Pointer;
+        size : Integer) : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+
+    曲データで定義されている ADPCM のファイル名を取得します。
+    musdata = NULL または size = 0 の場合は WinFMP.dll に読み込まれて
+    いる曲データに定義されている ADPCM ファイル名を取得し、その他の場合は
+    musdata と size で指定されるメモリ上の曲データに定義されている ADPCM
+    ファイル名を取得します。
+    dest で指定される文字列格納用のバッファは 12+1 バイト以上確保して下さい。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    char *fmp_getdefinedppzfilename(char *dest, uchar *musdata, int size,
+        int bufnum)
+    function fmp_getdefinedppzfilename(dest : PChar; musdata : Pointer;
+        size : Integer; bufnum : Integer) : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        musdata     曲データのポインタ
+        size        曲データのサイズ
+        bufnum      バッファ番号(0 または 1)
+    output          dest と同じ
+-------------------------------------------------------------------------------
+
+    曲データで定義されている PPZ のファイル名を取得します。
+    musdata = NULL または size = 0 の場合は WinFMP.dll に読み込まれて
+    いる曲データに定義されている PPZ ファイル名を取得し、その他の場合は
+    musdata と size で指定されるメモリ上の曲データに定義されている PPZ
+    ファイル名を取得します。
+    dest で指定される文字列格納用のバッファは 12+1 バイト以上確保して下さい。
+    bufnum = 0 のみが有効です。bufnum=1 の場合、dest はクリアされます。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_fgetdefinedpcmfilename(char *dest, char *filename)
+    function fmp_fgetdefinedpcmfilename(dest : PChar; filename : PChar)
+        : Integer;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        filename    曲データのファイル名（フルパス）
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+
+    曲データで定義されている ADPCM のファイル名を取得します。
+    ファイル名で指定する以外は fmp_getdefinedpcmfilename() と同じです。
+    filename = NULL の場合は WinFMP.dll に読み込まれている曲データに
+    定義されている ADPCM ファイル名を取得し、その他の場合は filename で
+    指定される曲データに定義されている ADPCM ファイル名を取得します。
+    dest で指定される文字列格納用のバッファは 12+1 バイト以上確保して下さい。
+
+    戻り値：
+        WINFMP_OK                   正常終了
+        FMP_ERR_OPEN_MUSIC_FILE     曲 データを開けなかった
+
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_fgetdefinedppzfilename(char *dest, char *filename, int bufnum)
+    function fmp_fgetdefinedppzfilename(dest : PChar; filename : PChar;
+        bufnum : Integer) : Integer;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        filename    曲データのファイル名（フルパス）
+        bufnum      バッファ番号(0 または 1)
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+
+    曲データで定義されている PPZ のファイル名を取得します。
+    ファイル名で指定する以外は fmp_getdefinedppzfilename() と同じです。
+    filename = NULL の場合は WinFMP.dll に読み込まれている曲データの
+    文字列を取得し、その他の場合は filename で指定される曲データの
+    メモ文字列を取得します。
+    dest で指定される文字列格納用のバッファは 12+1 バイト以上確保して下さい。
+    bufnum = 0 のみが有効です。bufnum=1 の場合、dest はクリアされます。
+
+    戻り値：
+        WINFMP_OK                   正常終了
+        FMP_ERR_OPEN_MUSIC_FILE     曲 データを開けなかった
+
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    char *fmp_getmusicfilename(char *dest);
+    function fmp_getmusicfilename(dest : PChar) : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll に読み込まれている曲データのファイル名(フルパス)を
+    取得します。
+    
+    
+===============================================================================
+    char *fmp_getpcmfilename(char *dest);
+    function fmp_getpcmfilename(dest : PChar) : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+    output          dest と同じ
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll に読み込まれている PVI(ADPCM) のファイル名(フルパス)を
+    取得します。
+    
+    
+===============================================================================
+    char *fmp_getppzfilename(char *dest, int bufnum);
+    function fmp_getppzfilename(dest : PChar; bufnum : Integer) : PChar;
+-------------------------------------------------------------------------------
+    input
+        dest        取得した文字列を格納するアドレスのポインタ
+        bufnum      バッファ番号(0 または 1)
+    output          dest と同じ
+-------------------------------------------------------------------------------
+    
+    WinFMP.dll に読み込まれている PPZ8 の PCM ファイル名(フルパス)を
+    取得します。
+    bufnum = 0 のみが有効です。bufnum=1 の場合、dest は '\0' が代入されます。
+    
+    
+===============================================================================
+    int fmp_maskon(bool rhythm_flag, int ah)
+    function fmp_maskon(rhythm_flag : Boolean; ah : Integer) : Integer;
+-------------------------------------------------------------------------------
+    input
+        rhythm_flag リズムパートかどうか？
+        ah          マスクをかけるチャンネル
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+
+    パートマスクをかけます。
+    
+    rhythm_flag = true の場合、
+        リズム音源のパートを、以下の数値の和で指定します。
+         1          バスドラム
+         2          スネアドラム
+         4          シンバル
+         8          ハイハット
+        16          タム    
+        32          リムショット
+
+    rhythm_flag = false の場合、
+         0～ 5      FM1 (A)～FM3(C),FM4(G)～FM6(I)
+         6～ 8      FMEx1～FMEx3
+        18～20      SSG1(D)～SSG3(F)
+        21          ADPCM(K)
+
+
+    戻り値：
+        WINFMP_OK                   正常終了
+        FMP_ERR_WRONG_PARTNO        パート番号が異常
+    
+    
+===============================================================================
+    int fmp_maskoff(int ch);
+    function fmp_maskoff(ch : Integer) : Integer;
+-------------------------------------------------------------------------------
+    input
+        ch          マスクをかけるチャンネル
+    output          下記の戻り値を参照
+-------------------------------------------------------------------------------
+    
+    パートマスクを解除します。
+    チャンネル番号は fmp_maskon() と同様です。
+    
+    戻り値：
+        WINFMP_OK                   正常終了
+        FMP_ERR_WRONG_PARTNO        パート番号が異常
+        FMP_ERR_NOT_MASKED          指定パートはマスクされていない
+        FMP_ERR_MUSIC_STOPPED       曲が止まっている
+    
+    
+===============================================================================
+    void fmp_setfmvoldown(int voldown);
+    procedure fmp_setfmvoldown(voldown : Integer);
+-------------------------------------------------------------------------------
+    input
+        voldown     ＦＭパートの音量補正値(０～９９)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    FM パートの音量を指定した値だけ下げます。
+    
+    
+===============================================================================
+    void fmp_setssgvoldown(int voldown);
+    procedure fmp_setssgvoldown(voldown : Integer);
+-------------------------------------------------------------------------------
+    input
+        voldown     ＳＳＧパートの音量補正値(０～１５)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    SSG パートの音量を指定した値だけ下げます。
+    
+    
+===============================================================================
+    void fmp_setrhythmvoldown(int voldown);
+    procedure fmp_setrhythmvoldown(voldown : Integer);
+-------------------------------------------------------------------------------
+    input
+        voldown     OPNA リズム音源の音量補正値(０～６３)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    OPNA リズム音源の音量を指定した値だけ下げます。
+    
+    
+===============================================================================
+    void fmp_setadpcmvoldown(int voldown);
+    procedure fmp_setadpcmvoldown(voldown : Integer);
+-------------------------------------------------------------------------------
+    input
+        voldown     ADPCM の音量補正値(０～９９)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    ADPCM の音量を指定した値だけ下げます。
+    
+    
+===============================================================================
+    void fmp_setppzvoldown(int voldown);
+    procedure fmp_setppzvoldown(voldown : Integer);
+-------------------------------------------------------------------------------
+    input
+        voldown     
+    output          なし
+-------------------------------------------------------------------------------
+    
+    現在のところ無効です。
+    PPZ8 パートの音量は fmp_setssgvoldown() で設定できます。
+    
+    
+===============================================================================
+    int fmp_getfmvoldown(void);
+    function fmp_getfmvoldown : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          ＦＭパートの音量補正値(０～９９)
+-------------------------------------------------------------------------------
+    
+    FM パートの音量補正値(fmp_setfmvoldown() で指定した値)を取得します。
+    
+    
+===============================================================================
+    int fmp_getssgvoldown(void);
+    function fmp_getssgvoldown : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          ＳＳＧパートの音量補正値(０～１５)
+-------------------------------------------------------------------------------
+    
+    SSG パートの音量補正値(fmp_setssgvoldown() で指定した値)を取得します。
+    
+    
+===============================================================================
+    int fmp_getrhythmvoldown(void);
+    function fmp_getrhythmvoldown : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          OPNA リズム音源の音量補正値(０～６３)
+-------------------------------------------------------------------------------
+    
+    OPNA リズム音源の音量補正値(fmp_setrhythmvoldown() で指定した値)を
+    取得します。
+    
+    
+===============================================================================
+    int fmp_getadpcmvoldown(void);
+    function fmp_getadpcmvoldown : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          ADPCM の音量補正値(０～９９)
+-------------------------------------------------------------------------------
+    
+    ADPCM の音量補正値(fmp_setadpcmvoldown() で指定した値)を取得します。
+    
+    
+===============================================================================
+    int fmp_getppzvoldown(void);
+    function fmp_getppzvoldown : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          ０
+-------------------------------------------------------------------------------
+    
+    現在のところ無効です。
+    PPZ8 パートの音量は fmp_getssgvoldown() で取得できます。
+    
+    
+===============================================================================
+    void fmp_setpos(int pos);
+    procedure fmp_setpos(pos : Integer);
+-------------------------------------------------------------------------------
+    input           再生位置(ms 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    演奏を指定した位置(ms 単位)にスキップします。
+    
+    
+===============================================================================
+    void fmp_setpos2(int pos);
+    procedure fmp_setpos2(pos : Integer);
+-------------------------------------------------------------------------------
+    input           再生位置(TimerB count 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    演奏を指定した位置(TimerB count 単位)にスキップします。
+    
+    
+===============================================================================
+    int fmp_getpos(void);
+    function fmp_getpos : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          再生位置(ms 単位)
+-------------------------------------------------------------------------------
+    
+    演奏開始後の再生位置(ms 単位)を取得します。
+    
+    
+===============================================================================
+    int fmp_getpos2(void);
+    function fmp_getpos2 : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          再生位置(TimerB count 単位)
+-------------------------------------------------------------------------------
+    
+    演奏開始後の再生位置(TimerB count 単位)を取得します。
+    
+    
+===============================================================================
+    bool fmp_getlength(char *filename, int *length, int *loop);
+    function fmp_getlength(filename : PChar; var length : Integer;
+        var loop : Integer) : Boolean;
+-------------------------------------------------------------------------------
+    input
+        filename    長さを取得する曲データのファイル名(フルパス)
+    output
+        戻り値      ファイルを読めて正常に取得できたら true
+        length      １ループ目の長さ(ms 単位)
+        loop        ２ループ目以降の１ループの長さ(ms 単位)
+-------------------------------------------------------------------------------
+    
+    filename で指定される曲の長さ(ms 単位)を取得します。
+    length で１ループ目の長さ、loop で２ループ目以降の１ループの長さを
+    取得します。２ループ分計算するため相当重いです。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    bool fmp_getlength2(char *filename, int *length, int *loop);
+    function fmp_getlength2(filename : PChar;
+        var length : Integer; var loop : Integer) : Boolean;
+-------------------------------------------------------------------------------
+    input
+        filename    長さを取得する曲データのファイル名(フルパス)
+    output
+        戻り値      ファイルを読めて正常に取得できたら true
+        length      １ループ目の長さ(TimerB count 単位)
+        loop        ２ループ目以降の１ループの長さ(TimerB count 単位)
+-------------------------------------------------------------------------------
+    
+    filename で指定される曲の長さ(TimerB count 単位)を取得します。
+    length で１ループ目の長さ、loop で２ループ目以降の１ループの長さを
+    取得します。２ループ分計算するため相当重いです。
+    
+    fmp_getlength(), fmp_getlength2(), fmp_getcomment(), fmp_getcomment2(), 
+    fmp_getcomment3(), fmp_fgetcomment(), fmp_fgetcomment2(), 
+    fmp_fgetcomment3(), fmp_getdefinedpcmfilename(),
+    fmp_getdefinedppzfilename(), fmp_fgetdefinedpcmfilename(),
+    fmp_fgetdefinedppzfilename() のどれかと他の関数の組み合わせのみ、
+    別のスレッドから同時に実行できます。
+
+
+===============================================================================
+    int fmp_getloopcount(void);
+    function fmp_getloopcount : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          ループ回数
+-------------------------------------------------------------------------------
+    
+    現在のループ回数を取得します。
+    
+    戻り値：
+        -1                          演奏停止中
+        0以上                       ループ回数
+
+
+===============================================================================
+    void fmp_setfmwait(int nsec);
+    function fmp_setfmwait(nsec : Integer);
+-------------------------------------------------------------------------------
+    input           wait(nsec 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    FM パートのレジスタにデータを出力する前の wait を設定します。
+    デフォルトは 15000 です。通常は変更する必要はありません。
+
+
+===============================================================================
+    void fmp_setssgwait(int nsec);
+    function fmp_setssgwait(nsec : Integer);
+-------------------------------------------------------------------------------
+    input           wait(nsec 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    SSG パートのレジスタにデータを出力する前の wait を設定します。
+    デフォルトは 15000 です。通常は変更する必要はありません。
+
+
+===============================================================================
+    void fmp_setrhythmwait(int nsec);
+    function fmp_setrhythmwait(nsec : Integer);
+-------------------------------------------------------------------------------
+    input           wait(nsec 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    リズムパートのレジスタにデータを出力する前の wait を設定します。
+    デフォルトは 15000 です。通常は変更する必要はありません。
+
+
+===============================================================================
+    void fmp_setadpcmwait(int nsec);
+    function fmp_setadpcmwait(nsec : Integer);
+-------------------------------------------------------------------------------
+    input           wait(nsec 単位)
+    output          なし
+-------------------------------------------------------------------------------
+    
+    ADPCM パートのレジスタにデータを出力する前の wait を設定します。
+    デフォルトは 15000 です。通常は変更する必要はありません。
+
+
+===============================================================================
+    int fmp_getsyncscnt(void);
+    function fmp_getsyncscnt : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          同期カウント
+-------------------------------------------------------------------------------
+    
+    カラオケ用の同期カウントを取得します。
+
+
+===============================================================================
+    int fmp_getlastsyncexttime(void);
+    function fmp_getlastsyncexttime : Integer;
+-------------------------------------------------------------------------------
+    input           なし
+    output          同期カウントが最後に更新された時間(ms 単位)
+-------------------------------------------------------------------------------
+    
+    カラオケ用の同期カウントが最後に更新された時間を取得します。
+
+
+===============================================================================
+    WORKS *fmp_getworks(void);
+    function fmp_getworks : PWORKS; 
+-------------------------------------------------------------------------------
+    input           なし
+    output          公開ワークのポインタ
+-------------------------------------------------------------------------------
+    公開ワークのポインタを取得します。
+    
+    ※ワークへの書き込みは行わないで下さい。
+    ※WORKS の構造は今後変更する可能性があります。
+    ※ワークの内容についての質問にはお答えできない場合があります。
+
+
+
+------------------------------------------------------------------------------
+▼連絡先
+
+    E-mail                  HQD00151@nifty.com
+    Homepage                http://c60.fmp.jp/
+
+
+
+                                                                Ｃ６０
